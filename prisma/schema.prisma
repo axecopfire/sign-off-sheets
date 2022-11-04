@@ -1,0 +1,63 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model Reference {
+  id         Int       @id @default(autoincrement())
+  title      String
+  href       String
+  LineItem   LineItem? @relation(fields: [lineItemId], references: [id])
+  lineItemId Int?
+}
+
+model LineItem {
+  id                 Int         @id @default(autoincrement())
+  sheet              Sheet       @relation(fields: [sheetId], references: [id])
+  sheetId            Int
+  acceptanceCriteria String
+  references         Reference[]
+  Signature          Signature[]
+}
+
+model Sheet {
+  id            Int             @id @default(autoincrement())
+  description   String
+  lineItems     LineItem[]
+  Qualification Qualification[]
+  User          User[]
+}
+
+model Signature {
+  id              Int           @id @default(autoincrement())
+  signedAt        DateTime      @default(now())
+  signer          User          @relation(fields: [signerId], references: [id])
+  lineItem        LineItem      @relation(fields: [lineItemId], references: [id])
+  signerId        Int
+  lineItemId      Int
+  Qualification   Qualification @relation(fields: [qualificationId], references: [id])
+  qualificationId Int
+}
+
+model Qualification {
+  id          Int         @id @default(autoincrement())
+  qualifiedAt DateTime    @default(now())
+  sheetIds    Sheet[]
+  user        User        @relation(fields: [userId], references: [id])
+  Signatures  Signature[]
+  userId      Int
+}
+
+model User {
+  id            Int             @id @default(autoincrement())
+  Signature     Signature[]
+  Qualification Qualification[]
+  Sheet         Sheet[]
+}
