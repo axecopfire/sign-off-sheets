@@ -57,6 +57,7 @@ model Qualification {
 
 model User {
   id            Int             @id @default(autoincrement())
+  name          String
   Signature     Signature[]
   Qualification Qualification[]
   Sheet         Sheet[]
