@@ -13,26 +13,28 @@ const learningPathTitle = "frontend-dev";
 const projectName = learningPathTitle + "-project";
 const org = "vets-who-code";
 
+const individualAccesses = ["jeromehardaway"];
+
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
   // Decorate parameter data, mostly use this to get node_id
-  const repo = await octokit.rest.repos.get({
-    owner,
-    repo: templateRepo,
+  const decoratedOrg = await octokit.rest.orgs.get({
+    org,
   });
   const decoratedOwner = await octokit.rest.users.getByUsername({
     username: owner,
   });
-  const decoratedTargetRepo = await octokit.rest.repos.get({
-    owner,
-    repo: targetRepo,
-  });
 
-  const ghIds = {
+  type GhIdsType = {
+    ownerId: string;
+    orgId: string;
+    targetRepoId?: string;
+  };
+  const ghIds: GhIdsType = {
     ownerId: decoratedOwner.data.node_id,
-    targetRepo: decoratedTargetRepo.data.node_id,
+    orgId: decoratedOrg.data.node_id,
   };
 
   // Create Repo
@@ -44,9 +46,29 @@ export default async function handler(
     private: true,
   });
 
-  return res.json(newRepo);
+  ghIds.targetRepoId = newRepo.data.node_id;
 
-  // Add Repo accesses (student, admins, mentors)
+  // Add Repo accesses (student, admins, qualified mentors)
+  // TODO: Add Qualified Mentors teams
+  const teams = await octokit.rest.teams.addOrUpdateRepoPermissionsInOrg({
+    org,
+    team_slug: "admins",
+    owner: org,
+    repo: targetRepo,
+    permission: "admin",
+  });
+
+  // Adds individuals to access list.
+  // It sends an invite, so for testing I don't want to keep pinging folks
+  // const individuals = await Promise.allSettled(
+  //   individualAccesses.map((username) =>
+  //     octokit.rest.repos.addCollaborator({
+  //       owner,
+  //       repo: targetRepo,
+  //       username,
+  //     })
+  //   )
+  // );
 
   // Copy Issues to new Repo
   const issuesList = await octokit.rest.issues.listForRepo({
@@ -62,7 +84,7 @@ export default async function handler(
       .map(async (issue) => {
         const issueOptions: RestEndpointMethodTypes["issues"]["create"]["parameters"] =
           {
-            owner,
+            owner: org,
             repo: targetRepo,
             title: issue.title,
           };
@@ -89,14 +111,15 @@ export default async function handler(
     };
   };
 
+  // TODO: Check for Graphql failures
   const {
     createProjectV2: { projectV2 },
   } = await gqlWithAuth<CreateProjectResponseType>(`mutation {
     createProjectV2(
           input: {
-            ownerId: "${ghIds.ownerId}"
+            ownerId: "${ghIds.orgId}"
             title: "${projectName}"
-            repositoryId: "${ghIds.targetRepo}"
+            repositoryId: "${ghIds.targetRepoId}"
           }
         )
         {
@@ -132,6 +155,10 @@ export default async function handler(
       id: node_id,
       title,
     })),
+    repoCreated: {
+      id: ghIds.targetRepoId,
+      title: newRepo.data.name,
+    },
   };
   res.json(response);
 }
