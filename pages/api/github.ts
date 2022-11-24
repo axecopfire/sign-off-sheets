@@ -7,10 +7,11 @@ import { ProjectV2 } from "@octokit/graphql-schema";
 import { graphql } from "@octokit/graphql";
 
 const templateRepo = "axecopfire";
-const targetRepo = "test-template-2";
+const targetRepo = "test-template";
 const owner = "axecopfire";
 const learningPathTitle = "frontend-dev";
 const projectName = learningPathTitle + "-project";
+const org = "vets-who-code";
 
 export default async function handler(
   req: NextApiRequest,
@@ -34,6 +35,19 @@ export default async function handler(
     targetRepo: decoratedTargetRepo.data.node_id,
   };
 
+  // Create Repo
+  const newRepo = await octokit.rest.repos.createUsingTemplate({
+    template_owner: owner,
+    template_repo: templateRepo,
+    owner: org,
+    name: targetRepo,
+    private: true,
+  });
+
+  return res.json(newRepo);
+
+  // Add Repo accesses (student, admins, mentors)
+
   // Copy Issues to new Repo
   const issuesList = await octokit.rest.issues.listForRepo({
     owner,
@@ -41,19 +55,23 @@ export default async function handler(
   });
 
   const createdIssues = await Promise.all(
-    issuesList.data.map(async (issue) => {
-      const issueOptions: RestEndpointMethodTypes["issues"]["create"]["parameters"] =
-        {
-          owner,
-          repo: targetRepo,
-          title: issue.title,
-        };
-      if (issue.body) issueOptions.body = issue.body;
-      if (issue.labels.length) issueOptions.labels = issue.labels;
+    issuesList.data
+      // https://octokit.github.io/rest.js/v19#issues-list-for-repo
+      // The point of this filter is the PRs are listed as issues for repos as well
+      .filter((issue) => !issue.pull_request)
+      .map(async (issue) => {
+        const issueOptions: RestEndpointMethodTypes["issues"]["create"]["parameters"] =
+          {
+            owner,
+            repo: targetRepo,
+            title: issue.title,
+          };
+        if (issue.body) issueOptions.body = issue.body;
+        if (issue.labels.length) issueOptions.labels = issue.labels;
 
-      const createdIssue = await octokit.rest.issues.create(issueOptions);
-      return createdIssue.data;
-    })
+        const createdIssue = await octokit.rest.issues.create(issueOptions);
+        return createdIssue.data;
+      })
   );
 
   // Create a projectv2
@@ -108,6 +126,12 @@ export default async function handler(
     })
   );
 
-  const response = linkedIssues;
+  const response = {
+    projectCreated: projectV2,
+    issuesCreated: createdIssues.map(({ node_id, title }) => ({
+      id: node_id,
+      title,
+    })),
+  };
   res.json(response);
 }
