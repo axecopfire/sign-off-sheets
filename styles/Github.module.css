@@ -1,0 +1,21 @@
+.github {
+  width: 80%;
+  margin: 10px auto;
+  text-align: center;
+}
+
+.github input {
+  margin: 10px 20px 30px;;
+  padding: 5px 10px;
+}
+
+.github form {
+  text-align: left;
+  border: 2px lightblue solid;
+  padding: 10px 20px;
+  border-radius: 10px; 
+}
+
+.github label {
+  display: block;
+}
