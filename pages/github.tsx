@@ -11,7 +11,7 @@ const formElementNames = [
 type FormPropertyNames = typeof formElementNames[number][0];
 
 export default function Github() {
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
     const getFormProperty = (name: FormPropertyNames) =>
@@ -24,6 +24,13 @@ export default function Github() {
         [elementPropertyName]: getFormProperty(elementPropertyName),
       };
     }, {});
+
+    const data = await fetch("/api/github", {
+      method: "POST",
+      body: JSON.stringify({ ...formProperties, addIndividualAccesses: true }),
+    }).then((d) => d.json());
+
+    console.log({ data });
 
     console.table(formProperties);
   };

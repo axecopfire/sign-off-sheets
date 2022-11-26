@@ -6,43 +6,51 @@ import octokit from "common/octokitClient";
 import { ProjectV2 } from "@octokit/graphql-schema";
 import { graphql } from "@octokit/graphql";
 
-const templateRepo = "axecopfire";
-const targetRepo = "test-template";
-const owner = "axecopfire";
-const learningPathTitle = "frontend-dev";
-const projectName = learningPathTitle + "-project";
+const owner = "vets-who-code";
 const org = "vets-who-code";
-
-const individualAccesses = ["jeromehardaway"];
 
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
+  if (!req.method || req.method !== "POST" || !req.body)
+    return res.status(400).send("Bad request");
+
+  const body = JSON.parse(req.body);
+
+  const { studentName, mentorName, learningPath } = body;
+
+  // It sends an invite, so for testing I don't want to keep pinging folks
+  // TODO: Should create a configurable dry-run (repo create, invitations, issues etc.)
+  const addIndividualAccesses = body.addIndividualAccesses || false;
+
+  if (!studentName || !mentorName || !learningPath) {
+    return res.status(502).send("Required field missing");
+  }
+
+  const projectName = learningPath + "-project";
+
   // Decorate parameter data, mostly use this to get node_id
   const decoratedOrg = await octokit.rest.orgs.get({
-    org,
-  });
-  const decoratedOwner = await octokit.rest.users.getByUsername({
-    username: owner,
+    org: owner,
   });
 
+  const targetRepoName = learningPath + "-" + studentName;
+
   type GhIdsType = {
-    ownerId: string;
     orgId: string;
     targetRepoId?: string;
   };
   const ghIds: GhIdsType = {
-    ownerId: decoratedOwner.data.node_id,
     orgId: decoratedOrg.data.node_id,
   };
 
   // Create Repo
   const newRepo = await octokit.rest.repos.createUsingTemplate({
     template_owner: owner,
-    template_repo: templateRepo,
-    owner: org,
-    name: targetRepo,
+    template_repo: learningPath,
+    owner,
+    name: targetRepoName,
     private: true,
   });
 
@@ -54,26 +62,28 @@ export default async function handler(
     org,
     team_slug: "admins",
     owner: org,
-    repo: targetRepo,
+    repo: targetRepoName,
     permission: "admin",
   });
+  let individualsAdded: any[] = [];
 
   // Adds individuals to access list.
-  // It sends an invite, so for testing I don't want to keep pinging folks
-  // const individuals = await Promise.allSettled(
-  //   individualAccesses.map((username) =>
-  //     octokit.rest.repos.addCollaborator({
-  //       owner,
-  //       repo: targetRepo,
-  //       username,
-  //     })
-  //   )
-  // );
+  if (addIndividualAccesses) {
+    individualsAdded = await Promise.allSettled(
+      [studentName, mentorName].map(async (username) => {
+        return octokit.rest.repos.addCollaborator({
+          owner: org,
+          repo: targetRepoName,
+          username,
+        });
+      })
+    );
+  }
 
   // Copy Issues to new Repo
   const issuesList = await octokit.rest.issues.listForRepo({
     owner,
-    repo: templateRepo,
+    repo: learningPath,
   });
 
   const createdIssues = await Promise.all(
@@ -85,7 +95,7 @@ export default async function handler(
         const issueOptions: RestEndpointMethodTypes["issues"]["create"]["parameters"] =
           {
             owner: org,
-            repo: targetRepo,
+            repo: targetRepoName,
             title: issue.title,
           };
         if (issue.body) issueOptions.body = issue.body;
@@ -159,6 +169,7 @@ export default async function handler(
       id: ghIds.targetRepoId,
       title: newRepo.data.name,
     },
+    individualsAdded,
   };
   res.json(response);
 }
